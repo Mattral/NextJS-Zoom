@@ -1,28 +1,108 @@
 "use client";
 
 import { CSSProperties, useRef, useState, useEffect } from "react";
-import ZoomVideo, {
-  type VideoClient,
-  VideoQuality,
-  type VideoPlayer,
-} from "@zoom/videosdk";
+import ZoomVideo, { VideoClient, VideoQuality, VideoPlayer } from "@zoom/videosdk";
 import { CameraButton, MicButton } from "./MuteButtons";
 import { WorkAroundForSafari } from "@/lib/utils";
 import { PhoneOff } from "lucide-react";
 import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Snackbar,
+} from "@mui/material";
+import ChatPopup from "./ChatPopup"; // New chat component
+import { styled } from "@mui/material/styles";
 
-const Videocall = (props: { slug: string; JWT: string }) => {
-  const session = props.slug;
-  const jwt = props.JWT;
+// Styled components for better visual aesthetics
+const Container = styled("div")(({ theme }) => ({
+  display: "flex",
+  flexDirection: "column",
+  height: "100%",
+  width: "100%",
+  alignItems: "center",
+  backgroundColor: theme.palette.background.default,
+  padding: theme.spacing(2),
+}));
+
+const VideoPlayerContainer = styled("div")(({ theme }) => ({
+  height: "60vh",
+  width: "90%",
+  marginTop: theme.spacing(2),
+  borderRadius: "10px",
+  overflow: "hidden",
+  boxShadow: theme.shadows[5],
+  backgroundColor: theme.palette.grey[100],
+}));
+
+const ButtonGroup = styled("div")(({ theme }) => ({
+  display: "flex",
+  justifyContent: "space-around",
+  width: "100%",
+  maxWidth: "400px",
+  marginTop: theme.spacing(2),
+}));
+
+const Title = styled("h1")(({ theme }) => ({
+  textAlign: "center",
+  fontSize: "2rem",
+  fontWeight: "bold",
+  marginBottom: theme.spacing(2),
+}));
+
+const TimeCounter = styled("div")(({ theme }) => ({
+  marginTop: theme.spacing(1),
+  fontSize: "1.5rem",
+  fontWeight: "bold",
+  color: theme.palette.text.primary,
+}));
+
+const ChatButton = styled(Button)(({ theme }) => ({
+  marginTop: theme.spacing(2),
+  backgroundColor: theme.palette.primary.main,
+  color: "#fff",
+  "&:hover": {
+    backgroundColor: theme.palette.primary.dark,
+  },
+}));
+
+const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
+  const session = slug;
+  const jwt = JWT;
   const [inSession, setInSession] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(false); // State for chat popup
+  const [elapsedTime, setElapsedTime] = useState(0); // State for elapsed time
+
   const client = useRef<typeof VideoClient>(ZoomVideo.createClient());
-  const [isVideoMuted, setIsVideoMuted] = useState(false);  // Default to false
-  const [isAudioMuted, setIsAudioMuted] = useState(false);  // Default to false
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
+
   useEffect(() => {
-    console.log("Video container ref:", videoContainerRef.current);
-  }, [videoContainerRef]);
+    if (userName && !isDialogOpen) {
+      joinSession();
+    }
+  }, [userName, isDialogOpen]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (inSession) {
+      timer = setInterval(() => setElapsedTime((prev) => prev + 1), 1000); // Update every second
+    }
+    return () => clearInterval(timer);
+  }, [inSession]);
+
+  const handleJoin = () => {
+    if (userName.trim() !== "") {
+      setIsDialogOpen(false);
+    }
+  };
 
   const joinSession = async () => {
     console.log("Joining session...");
@@ -31,24 +111,24 @@ const Videocall = (props: { slug: string; JWT: string }) => {
       "peer-video-state-change",
       (payload) => void renderVideo(payload)
     );
-    await client.current.join(session, jwt, userName).catch((e) => {
+    try {
+      await client.current.join(session, jwt, userName);
+      setInSession(true);
+      const mediaStream = client.current.getMediaStream();
+      //@ts-expect-error
+      window.safari
+        ? await WorkAroundForSafari(client.current)
+        : await mediaStream.startAudio();
+      setIsAudioMuted(false);
+      await mediaStream.startVideo();
+      setIsVideoMuted(false);
+      await renderVideo({
+        action: "Start",
+        userId: client.current.getCurrentUserInfo().userId,
+      });
+    } catch (e) {
       console.log("Join error:", e);
-    });
-    setInSession(true);
-    const mediaStream = client.current.getMediaStream();
-    // @ts-expect-error https://stackoverflow.com/questions/7944460/detect-safari-browser/42189492#42189492
-    window.safari
-      ? await WorkAroundForSafari(client.current)
-      : await mediaStream.startAudio();
-    setIsAudioMuted(false);  // Set to false to indicate the audio is on
-    await mediaStream.startVideo().catch((e) => {
-      console.log("Start video error:", e);
-    });
-    setIsVideoMuted(false);  // Set to false to indicate the video is on
-    await renderVideo({
-      action: "Start",
-      userId: client.current.getCurrentUserInfo().userId,
-    });
+    }
   };
 
   const renderVideo = async (event: {
@@ -56,7 +136,6 @@ const Videocall = (props: { slug: string; JWT: string }) => {
     userId: number;
   }) => {
     const mediaStream = client.current.getMediaStream();
-    console.log("Rendering video:", event);
     if (event.action === "Stop") {
       const element = await mediaStream.detachVideo(event.userId);
       Array.isArray(element)
@@ -67,67 +146,91 @@ const Videocall = (props: { slug: string; JWT: string }) => {
         event.userId,
         VideoQuality.Video_360P
       );
-      console.log("User video:", userVideo);
       videoContainerRef.current!.appendChild(userVideo as VideoPlayer);
     }
   };
 
   const leaveSession = async () => {
-    client.current.off(
-      "peer-video-state-change",
-      (payload: { action: "Start" | "Stop"; userId: number }) =>
-        void renderVideo(payload)
-    );
-    await client.current.leave().catch((e) => console.log("Leave error:", e));
-    // hard refresh to clear the state
+    client.current.off("peer-video-state-change", (payload) => void renderVideo(payload));
+    await client.current.leave();
     window.location.href = "/";
   };
 
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
   return (
-    <div className="flex h-full w-full flex-1 flex-col">
-      <h1 className="text-center text-3xl font-bold mb-4 mt-0">
-        Session: {session}
-      </h1>
-      <div
-        className="flex w-full flex-1"
-        style={inSession ? {} : { display: "none" }}
-      >
+    <Container>
+      <Dialog open={isDialogOpen}>
+        <DialogTitle>Enter Your Name</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Name"
+            fullWidth
+            variant="outlined"
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleJoin}>Join</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Title>Session: {session}</Title>
+
+      <div className={`flex w-full flex-1 ${inSession ? "" : "hidden"} justify-center`}>
         {/* @ts-expect-error html component */}
         <video-player-container ref={videoContainerRef} style={videoPlayerStyle} />
       </div>
-      {!inSession ? (
-        <div className="mx-auto flex w-64 flex-col self-center">
-          <div className="w-4" />
-          <Button className="flex flex-1" onClick={joinSession} title="join session">
-            Join
-          </Button>
-        </div>
-      ) : (
-        <div className="flex w-full flex-col justify-around self-center">
-          <div className="mt-4 flex w-[30rem] flex-1 justify-around self-center rounded-md bg-white p-4">
-            <CameraButton
-              client={client}
-              isVideoMuted={isVideoMuted}
-              setIsVideoMuted={setIsVideoMuted}
-              renderVideo={renderVideo}
-            />
-            <MicButton
-              isAudioMuted={isAudioMuted}
-              client={client}
-              setIsAudioMuted={setIsAudioMuted}
-            />
-            <Button onClick={leaveSession} title="leave session">
-              <PhoneOff />
-            </Button>
-          </div>
-        </div>
+
+      {/* Time Counter Display */}
+      {inSession && (
+        <TimeCounter>
+          Elapsed Time: {formatTime(elapsedTime)}
+        </TimeCounter>
       )}
-    </div>
+
+      {inSession && (
+        <ButtonGroup>
+          <CameraButton
+            client={client}
+            isVideoMuted={isVideoMuted}
+            setIsVideoMuted={setIsVideoMuted}
+            renderVideo={renderVideo}
+          />
+          <MicButton
+            isAudioMuted={isAudioMuted}
+            client={client}
+            setIsAudioMuted={setIsAudioMuted}
+          />
+          <Button onClick={leaveSession}>
+            <PhoneOff />
+          </Button>
+        </ButtonGroup>
+      )}
+
+      {/* Chat Popup Toggle Button */}
+      {inSession && (
+        <ChatButton onClick={() => setIsChatOpen(!isChatOpen)}>
+          {isChatOpen ? "Close Chat" : "Open Chat"}
+        </ChatButton>
+      )}
+
+      {/* Chat Popup */}
+      {inSession && isChatOpen && <ChatPopup onClose={() => setIsChatOpen(false)} />}
+    </Container>
   );
 };
 
 export default Videocall;
 
+// Responsive styling for video player
 const videoPlayerStyle = {
   height: "75vh",
   marginTop: "1.5rem",
@@ -136,144 +239,13 @@ const videoPlayerStyle = {
   alignContent: "center",
   borderRadius: "10px",
   overflow: "hidden",
+  width: "90%", // Adjust width for mobile responsiveness
 } as CSSProperties;
 
-const userName = `User-${new Date().getTime().toString().slice(8)}`;
-
-/*"use client";
-
-import { CSSProperties, useRef, useState } from "react";
-import ZoomVideo, {
-  type VideoClient,
-  VideoQuality,
-  type VideoPlayer,
-} from "@zoom/videosdk";
-import { CameraButton, MicButton } from "./MuteButtons";
-import { WorkAroundForSafari } from "@/lib/utils";
-import { PhoneOff } from "lucide-react";
-import { Button } from "./ui/button";
-
-const Videocall = (props: { slug: string; JWT: string }) => {
-  const session = props.slug;
-  const jwt = props.JWT;
-  const [inSession, setInSession] = useState(false);
-  const client = useRef<typeof VideoClient>(ZoomVideo.createClient());
-  const [isVideoMuted, setIsVideoMuted] = useState(
-    !client.current.getCurrentUserInfo()?.bVideoOn
-  );
-  const [isAudioMuted, setIsAudioMuted] = useState(
-    client.current.getCurrentUserInfo()?.muted ?? true
-  );
-  const videoContainerRef = useRef<HTMLDivElement>(null);
-
-  const joinSession = async () => {
-    await client.current.init("en-US", "Global", { patchJsMedia: true });
-    client.current.on(
-      "peer-video-state-change",
-      (payload) => void renderVideo(payload)
-    );
-    await client.current.join(session, jwt, userName).catch((e) => {
-      console.log(e);
-    });
-    setInSession(true);
-    const mediaStream = client.current.getMediaStream();
-    // @ts-expect-error https://stackoverflow.com/questions/7944460/detect-safari-browser/42189492#42189492
-    window.safari
-      ? await WorkAroundForSafari(client.current)
-      : await mediaStream.startAudio();
-    setIsAudioMuted(client.current.getCurrentUserInfo().muted ?? true);
-    await mediaStream.startVideo();
-    setIsVideoMuted(!client.current.getCurrentUserInfo().bVideoOn);
-    await renderVideo({
-      action: "Start",
-      userId: client.current.getCurrentUserInfo().userId,
-    });
-  };
-
-  const renderVideo = async (event: {
-    action: "Start" | "Stop";
-    userId: number;
-  }) => {
-    const mediaStream = client.current.getMediaStream();
-    if (event.action === "Stop") {
-      const element = await mediaStream.detachVideo(event.userId);
-      Array.isArray(element)
-        ? element.forEach((el) => el.remove())
-        : element.remove();
-    } else {
-      const userVideo = await mediaStream.attachVideo(
-        event.userId,
-        VideoQuality.Video_360P
-      );
-      videoContainerRef.current!.appendChild(userVideo as VideoPlayer);
-    }
-  };
-
-  const leaveSession = async () => {
-    client.current.off(
-      "peer-video-state-change",
-      (payload: { action: "Start" | "Stop"; userId: number }) =>
-        void renderVideo(payload)
-    );
-    await client.current.leave().catch((e) => console.log("leave error", e));
-    // hard refresh to clear the state
-    window.location.href = "/";
-  };
-
-  return (
-    <div className="flex h-full w-full flex-1 flex-col">
-      <h1 className="text-center text-3xl font-bold mb-4 mt-0">
-        Session: {session}
-      </h1>
-      <div
-        className="flex w-full flex-1"
-        style={inSession ? {} : { display: "none" }}
-      >
-        {/* @ts-expect-error html component }
-        <video-player-container ref={videoContainerRef} style={videoPlayerStyle} />
-      </div>
-      {!inSession ? (
-        <div className="mx-auto flex w-64 flex-col self-center">
-          <div className="w-4" />
-          <Button className="flex flex-1" onClick={joinSession} title="join session">
-            Join
-          </Button>
-        </div>
-      ) : (
-        <div className="flex w-full flex-col justify-around self-center">
-          <div className="mt-4 flex w-[30rem] flex-1 justify-around self-center rounded-md bg-white p-4">
-            <CameraButton
-              client={client}
-              isVideoMuted={isVideoMuted}
-              setIsVideoMuted={setIsVideoMuted}
-              renderVideo={renderVideo}
-            />
-            <MicButton
-              isAudioMuted={isAudioMuted}
-              client={client}
-              setIsAudioMuted={setIsAudioMuted}
-            />
-            <Button onClick={leaveSession} title="leave session">
-              <PhoneOff />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+// Add responsive styles for mobile view
+const responsiveStyles = {
+  "@media (max-width: 768px)": {
+    height: "90vh", // Make the video player larger on mobile
+    width: "95%", // Full width on mobile
+  },
 };
-
-export default Videocall;
-
-const videoPlayerStyle = {
-  height: "75vh",
-  marginTop: "1.5rem",
-  marginLeft: "3rem",
-  marginRight: "3rem",
-  alignContent: "center",
-  borderRadius: "10px",
-  overflow: "hidden",
-} as CSSProperties;
-
-const userName = `User-${new Date().getTime().toString().slice(8)}`;
-*/
