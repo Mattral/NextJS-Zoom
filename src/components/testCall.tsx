@@ -131,7 +131,10 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
     }
   };
 
-  const renderVideo = async (event: { action: "Start" | "Stop"; userId: number }) => {
+  const renderVideo = async (event: {
+    action: "Start" | "Stop";
+    userId: number;
+  }) => {
     const mediaStream = client.current.getMediaStream();
     if (event.action === "Stop") {
       const element = await mediaStream.detachVideo(event.userId);
@@ -143,34 +146,10 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
         event.userId,
         VideoQuality.Video_360P
       );
-      
-      // Create a container for video and username
-      const videoContainer = document.createElement("div");
-      videoContainer.style.position = "relative";
-      videoContainer.style.textAlign = "center"; // Center username under video
-  
-      // Append the video to the container
-      videoContainer.appendChild(userVideo as VideoPlayer);
-  
-      // Create a div for the username
-      const userNameDiv = document.createElement("div");
-      userNameDiv.innerText = userName; // Use the current userName
-      userNameDiv.style.color = "white";
-      userNameDiv.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-      userNameDiv.style.padding = "5px";
-      userNameDiv.style.position = "absolute";
-      userNameDiv.style.bottom = "0"; // Position it below the video
-      userNameDiv.style.width = "100%";
-      userNameDiv.style.textAlign = "center"; // Center text
-  
-      // Append the username below the video
-      videoContainer.appendChild(userNameDiv);
-  
-      // Append the container to the video container ref
-      videoContainerRef.current!.appendChild(videoContainer);
+      videoContainerRef.current!.appendChild(userVideo as VideoPlayer);
     }
   };
-  
+
   const renderScreenShare = async (event: { action: "Start" | "Stop"; userId: number }) => {
     console.log("Screen share event:", event);
     const mediaStream = client.current.getMediaStream();
@@ -216,13 +195,13 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
         videoElement.muted = true;
         screenShareContainerRef.current?.appendChild(videoElement);
   
-        // Handle the track end event
+        setIsScreenSharing(true);
+  
+        // Ensure proper cleanup when the stream ends
         stream.getVideoTracks()[0].addEventListener("ended", () => {
           setIsScreenSharing(false);
           videoElement.remove();
         });
-  
-        setIsScreenSharing(true);
       } else {
         // Stop sharing if it's already active
         const videoElement = screenShareContainerRef.current?.querySelector("video");
@@ -233,8 +212,6 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
       console.error("Screen share error:", error);
     }
   };
-  
-  
   
 
   const formatTime = (seconds: number) => {
@@ -268,17 +245,22 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
 
       <Title>Session: {session}</Title>
 
-      <div
-        className="flex w-full flex-1"
-        style={inSession ? {} : { display: "none" }}
-      >
-        {/* @ts-expect-error html component */}
-        <video-player-container ref={videoContainerRef} style={videoPlayerStyle} />
- 
-        {/* @ts-expect-error html component */}
-        <video-player-container ref={screenShareContainerRef} style={screenShareStyle} />
-  
-    </div>
+      <div className="flex w-full flex-1" >
+        {!isScreenSharing ? (
+          /* @ts-expect-error html component */
+          <video-player-container ref={videoContainerRef} style={videoPlayerStyle} />
+        ) : (
+          <>
+          {/* @ts-expect-error html component */}
+            <video-player-container ref={screenShareContainerRef} style={screenShareStyle} />
+            <div style={smallVideoStyle}>
+              {/* @ts-expect-error html component */}
+              <video-player-container ref={videoContainerRef} />
+            </div>
+          </>
+        )}
+      </div>
+
 
       {/* Time Counter Display */}
       {inSession && (
@@ -299,14 +281,16 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
             setIsAudioMuted={setIsAudioMuted}
           />
           {/* Screen Share Button */}
-          {/* Toggle Screen Share Button */}
-          <Button
-            variant="contained"
-            color={isScreenSharing ? "secondary" : "primary"}
-            onClick={toggleScreenShare}
-            startIcon={isScreenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
-          >
-            {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
+          <Button onClick={toggleScreenShare}>
+            {isScreenSharing ? (
+              <>
+                <StopScreenShareIcon /> Stop Share
+              </>
+            ) : (
+              <>
+                <ScreenShareIcon /> Share Screen
+              </>
+            )}
           </Button>
           <Button onClick={leaveSession}>
             <PhoneOff />
@@ -323,7 +307,7 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
 
       {/* Chat Popup */}
       {inSession && isChatOpen && (
-        <ChatPopup onClose={() => setIsChatOpen(false)} userName={userName} />
+        <ChatPopup onClose={() => setIsChatOpen(false)} />
       )}
     </Container>
   );
@@ -333,7 +317,7 @@ export default Videocall;
 
 // Adjusted styles for responsiveness and screen share mode
 const videoPlayerStyle: CSSProperties = {
-  height: "50vh",
+  height: "75vh",
   width: "90%",
   marginTop: "1.5rem",
   borderRadius: "10px",

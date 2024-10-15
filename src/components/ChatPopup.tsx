@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -10,22 +10,38 @@ import {
   Box,
   Typography,
   Divider,
+  Avatar,
 } from "@mui/material";
 import { AttachFile, Send } from "@mui/icons-material";
+import dayjs from "dayjs"; // For time formatting
+
+interface ChatMessage {
+  text: string;
+  isUser: boolean;
+  userName: string;
+  timestamp: string;
+}
 
 interface ChatPopupProps {
   onClose: () => void;
+  userName: string;
 }
 
-const ChatPopup: React.FC<ChatPopupProps> = ({ onClose }) => {
+const ChatPopup: React.FC<ChatPopupProps> = ({ onClose, userName }) => {
   const [message, setMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [messages, setMessages] = useState<{ text: string; isUser: boolean }[]>([]); // Store chat messages
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Reference to the bottom of the chat box
 
   const handleSendMessage = () => {
     if (message.trim() !== "") {
-      setMessages((prevMessages) => [...prevMessages, { text: message, isUser: true }]);
-      console.log("Message sent:", message);
+      const newMessage: ChatMessage = {
+        text: message,
+        isUser: true,
+        userName: userName,
+        timestamp: dayjs().format("HH:mm A"),
+      };
+      setMessages((prevMessages) => [...prevMessages, newMessage]);
       setMessage(""); // Clear the input
     }
   };
@@ -33,50 +49,54 @@ const ChatPopup: React.FC<ChatPopupProps> = ({ onClose }) => {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0] || null;
     setFile(selectedFile);
-    if (selectedFile) {
-      console.log("File selected:", selectedFile.name);
-    }
   };
 
   const handleFileSend = () => {
     if (file) {
-      // Logic to send the file in the chat
       console.log("File sent:", file.name);
       setFile(null); // Reset file after sending
     }
   };
 
+  // Auto scroll to the bottom when new messages are added
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Simulate incoming messages every 5 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      // Inject an incoming message every 2 seconds
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { text: "Hi", isUser: false }, // Incoming message
-      ]);
-    }, 2000);
+      const incomingMessage: ChatMessage = {
+        text: "Hi there!",
+        isUser: false,
+        userName: "ChatBot",
+        timestamp: dayjs().format("HH:mm A"),
+      };
+      setMessages((prevMessages) => [...prevMessages, incomingMessage]);
+    }, 5000);
 
     return () => clearInterval(interval); // Clean up interval on unmount
   }, []);
 
   return (
-    <Dialog open={true} onClose={onClose} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: "16px", boxShadow: 24 } }}>
-      <DialogTitle sx={{ backgroundColor: "#6200ea", color: "#fff", borderTopLeftRadius: "16px", borderTopRightRadius: "16px" }}>
+    <Dialog open={true} onClose={onClose} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: "16px", boxShadow: 24 } }}>
+      <DialogTitle sx={{ backgroundColor: "#6200ea", color: "#fff", borderTopLeftRadius: "16px", borderTopRightRadius: "16px", textAlign: 'center', fontSize: '1.5rem' }}>
         Chat
       </DialogTitle>
       <DialogContent sx={{ paddingBottom: 0 }}>
         {/* Chat message display */}
         <Box
           sx={{
-            height: '300px',
+            height: '400px', // Increased height
             overflowY: 'scroll',
             mb: 2,
             border: '1px solid #ddd',
             borderRadius: '8px',
-            padding: '10px',
+            padding: '16px',
             backgroundColor: '#f9f9f9',
             borderColor: '#e0e0e0',
             display: 'flex',
-            flexDirection: 'column-reverse', // Reverse order to show latest messages at the bottom
+            flexDirection: 'column',
           }}
         >
           {messages.length > 0 ? (
@@ -84,21 +104,51 @@ const ChatPopup: React.FC<ChatPopupProps> = ({ onClose }) => {
               <Box
                 key={idx}
                 sx={{
-                  alignSelf: msg.isUser ? 'flex-end' : 'flex-start',
-                  backgroundColor: msg.isUser ? '#e3f2fd' : '#fff',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  margin: '5px 0',
-                  maxWidth: '80%',
-                  boxShadow: 1,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  mb: 1,
+                  flexDirection: msg.isUser ? 'row-reverse' : 'row',
                 }}
               >
-                <Typography variant="body2">{msg.text}</Typography>
+                {/* Profile circle */}
+                <Avatar sx={{ bgcolor: msg.isUser ? "#6200ea" : "#ccc", marginRight: msg.isUser ? 0 : 2, marginLeft: msg.isUser ? 2 : 0 }}>
+                  {msg.userName.charAt(0)}
+                </Avatar>
+
+                {/* Chat message bubble */}
+                <Box
+                  sx={{
+                    backgroundColor: msg.isUser ? '#e3f2fd' : '#fff',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    boxShadow: 1,
+                    maxWidth: '80%',
+                    textAlign: msg.isUser ? 'right' : 'left',
+                  }}
+                >
+                  {/* User name */}
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: msg.isUser ? "#6200ea" : "#000" }}>
+                    {msg.userName}
+                  </Typography>
+
+                  {/* Chat text */}
+                  <Typography variant="body2" sx={{ marginTop: '5px' }}>
+                    {msg.text}
+                  </Typography>
+
+                  {/* Timestamp - moved below the text message */}
+                  <Typography variant="caption" color="textSecondary" sx={{ display: 'block', marginTop: '5px' }}>
+                    {msg.timestamp}
+                  </Typography>
+                </Box>
               </Box>
             ))
           ) : (
-            <Typography variant="body2" color="text.secondary">No messages yet.</Typography>
+            <Typography variant="body2" color="text.secondary" textAlign="center">No messages yet.</Typography>
           )}
+
+          {/* Auto-scroll to bottom */}
+          <div ref={messagesEndRef} />
         </Box>
 
         <Divider sx={{ marginBottom: 2 }} />
@@ -152,7 +202,7 @@ const ChatPopup: React.FC<ChatPopupProps> = ({ onClose }) => {
           color="primary"
           variant="contained"
           endIcon={<Send />}
-          sx={{ borderRadius: '20px' }}
+          sx={{ borderRadius: '20px', padding: '10px 20px' }}
         >
           Send Message
         </Button>
@@ -161,12 +211,12 @@ const ChatPopup: React.FC<ChatPopupProps> = ({ onClose }) => {
             onClick={handleFileSend}
             color="secondary"
             variant="contained"
-            sx={{ borderRadius: '20px' }}
+            sx={{ borderRadius: '20px', padding: '10px 20px' }}
           >
             Send File
           </Button>
         )}
-        <Button onClick={onClose} color="inherit" variant="outlined" sx={{ borderRadius: '20px' }}>
+        <Button onClick={onClose} color="inherit" variant="outlined" sx={{ borderRadius: '20px', padding: '10px 20px' }}>
           Close
         </Button>
       </DialogActions>

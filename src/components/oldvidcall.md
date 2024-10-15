@@ -1,3 +1,4 @@
+exapmple code do not rewrite this
 /*"use client";
 
 import { CSSProperties, useRef, useState } from "react";
@@ -87,7 +88,7 @@ const Videocall = (props: { slug: string; JWT: string }) => {
         className="flex w-full flex-1"
         style={inSession ? {} : { display: "none" }}
       >
-        {/* @ts-expect-error html component }
+        {/* @ts-expect-error html component */}
         <video-player-container ref={videoContainerRef} style={videoPlayerStyle} />
       </div>
       {!inSession ? (
