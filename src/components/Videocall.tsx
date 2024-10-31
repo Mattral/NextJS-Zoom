@@ -18,6 +18,7 @@ import ChatPopup from "./ChatPopup"; // Existing chat component
 import { styled } from "@mui/material/styles";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare"; // Icon for screen sharing
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare"; // Icon to stop screen sharing
+import Transcription from "./Transcription"; // Import the transcription component
 
 // Styled components for better visual aesthetics
 const Container = styled("div")(({ theme }) => ({
@@ -39,6 +40,16 @@ const ButtonGroup = styled("div")(({ theme }) => ({
   flexWrap: "wrap",
 }));
 
+const VideoAndShareContainer = styled("div")(({ theme }) => ({
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: theme.spacing(2),
+  width: "100%",
+  "@media (max-width: 768px)": { // Responsive on smaller screens
+    gridTemplateColumns: "1fr",
+  },
+}));
+
 const Title = styled("h1")(({ theme }) => ({
   textAlign: "center",
   fontSize: "2rem",
@@ -54,11 +65,12 @@ const TimeCounter = styled("div")(({ theme }) => ({
 }));
 
 const ChatButton = styled(Button)(({ theme }) => ({
-  marginTop: theme.spacing(2),
+  marginTop: theme.spacing(1),
   backgroundColor: theme.palette.primary.main,
   color: "#fff",
-  "&:hover": {
-    backgroundColor: theme.palette.primary.dark,
+  padding: "0.5rem 1rem", // Adjust padding for better touch response on mobile
+  "@media (max-width: 768px)": { 
+    width: "100%", // Full width on smaller screens
   },
 }));
 
@@ -71,6 +83,7 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
   const [isChatOpen, setIsChatOpen] = useState(false); // State for chat popup
   const [elapsedTime, setElapsedTime] = useState(0); // State for elapsed time
   const [isScreenSharing, setIsScreenSharing] = useState(false); // State for screen sharing
+  const [showTranscription, setShowTranscription] = useState(false); // Controls transcription visibility
 
   const client = useRef<typeof VideoClient>(ZoomVideo.createClient());
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -188,8 +201,6 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
     }
   };
   
-  
-
   const leaveSession = async () => {
     client.current.off("peer-video-state-change", (payload) =>
       void renderVideo(payload)
@@ -234,8 +245,6 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
     }
   };
   
-  
-  
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -268,17 +277,12 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
 
       <Title>Session: {session}</Title>
 
-      <div
-        className="flex w-full flex-1"
-        style={inSession ? {} : { display: "none" }}
-      >
+      <VideoAndShareContainer>
         {/* @ts-expect-error html component */}
         <video-player-container ref={videoContainerRef} style={videoPlayerStyle} />
- 
         {/* @ts-expect-error html component */}
         <video-player-container ref={screenShareContainerRef} style={screenShareStyle} />
-  
-    </div>
+      </VideoAndShareContainer>
 
       {/* Time Counter Display */}
       {inSession && (
@@ -321,6 +325,31 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
         </ChatButton>
       )}
 
+      <Button onClick={() => setShowTranscription(!showTranscription)}>
+          {showTranscription ? "Hide Transcription" : "Show Transcription"}
+      </Button>
+
+            {/* Conditionally Render Transcription Text */}
+            {inSession && showTranscription && (
+        <div
+          style={{
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            color: "white",
+            padding: "10px",
+            borderRadius: "8px",
+            textAlign: "center",
+            width: "100%",
+            maxWidth: "500px", // Limit width for wrapping
+            marginBottom: "2rem",
+            whiteSpace: "normal", // Allow wrapping
+            wordBreak: "break-word", // Wrap long words to the next line if necessary
+            fontSize: "1rem", // Adjust font size as needed
+          }}
+        >
+          <Transcription userName={userName} />
+        </div>
+      )}
+
       {/* Chat Popup */}
       {inSession && isChatOpen && (
         <ChatPopup onClose={() => setIsChatOpen(false)} userName={userName} />
@@ -333,28 +362,15 @@ export default Videocall;
 
 // Adjusted styles for responsiveness and screen share mode
 const videoPlayerStyle: CSSProperties = {
-  height: "50vh",
-  width: "90%",
-  marginTop: "1.5rem",
+  height: "100%", // Full container height
+  width: "100%",
   borderRadius: "10px",
-  overflow: "hidden",
+  border: "2px solid #ccc",
 };
 
 const screenShareStyle: CSSProperties = {
-  height: "75vh",
+  height: "100%", // Full container height
   width: "100%",
-  marginTop: "1.5rem",
   borderRadius: "10px",
-  overflow: "hidden",
-};
-
-const smallVideoStyle: CSSProperties = {
-  height: "20vh",
-  width: "25%",
-  marginTop: "1rem",
-  borderRadius: "10px",
-  overflow: "hidden",
-  position: "absolute",
-  bottom: "1rem",
-  right: "1rem",
+  border: "2px solid #ccc",
 };

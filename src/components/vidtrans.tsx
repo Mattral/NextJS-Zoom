@@ -18,7 +18,6 @@ import ChatPopup from "./ChatPopup"; // Existing chat component
 import { styled } from "@mui/material/styles";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare"; // Icon for screen sharing
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare"; // Icon to stop screen sharing
-import Transcription from "./Transcription"; // Import the transcription component
 
 // Styled components for better visual aesthetics
 const Container = styled("div")(({ theme }) => ({
@@ -72,15 +71,42 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
   const [isChatOpen, setIsChatOpen] = useState(false); // State for chat popup
   const [elapsedTime, setElapsedTime] = useState(0); // State for elapsed time
   const [isScreenSharing, setIsScreenSharing] = useState(false); // State for screen sharing
-  const [showTranscription, setShowTranscription] = useState(false); // Controls transcription visibility
 
   const client = useRef<typeof VideoClient>(ZoomVideo.createClient());
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const screenShareContainerRef = useRef<HTMLDivElement>(null); // Ref for screen share container
+  const [isTranscriptionEnabled, setIsTranscriptionEnabled] = useState(false);
 
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const liveTranscriptionTranslation = client.getLiveTranscriptionClient();
 
+  // Initialize the transcription client
+  const initLiveTranscription = async () => {
+    const liveTranscriptionClient = client.current.getLiveTranscriptionClient();
+
+    liveTranscriptionTranslation.getLiveTranscriptionStatus()
+    // Set the speaking language
+    await liveTranscriptionClient.setSpeakingLanguage("en");
+    // Set the translation language if needed (e.g., "es" for Spanish)
+    await liveTranscriptionClient.setTranslationLanguage("en");
+
+    // Start transcription
+    liveTranscriptionClient
+      .startLiveTranscription()
+      .then(() => {
+        setIsTranscriptionEnabled(true);
+        console.log("Transcription started");
+      })
+      .catch((err) => console.error("Transcription error:", err));
+
+    // Event listener for transcription data
+    client.current.on("caption-message", (payload) => {
+      console.log(`Original: ${payload.text}, Translated: ${payload.language}`);
+      // Display or process `payload.text` as needed
+    });
+  };
+  
   useEffect(() => {
     if (userName && !isDialogOpen) {
       joinSession();
@@ -128,10 +154,22 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
         action: "Start",
         userId: client.current.getCurrentUserInfo().userId,
       });
+      // Call the transcription setup function
+      await initLiveTranscription();
     } catch (e) {
       console.log("Join error:", e);
     }
   };
+
+    // Stop transcription function
+    const stopTranscription = async () => {
+      if (isTranscriptionEnabled) {
+        const liveTranscriptionClient = client.current.getLiveTranscriptionClient();
+        await liveTranscriptionClient.disableCaptions(false);
+        setIsTranscriptionEnabled(false);
+        console.log("Transcription stopped");
+      }
+    };
 
   const renderVideo = async (event: { action: "Start" | "Stop"; userId: number }) => {
     const mediaStream = client.current.getMediaStream();
@@ -200,6 +238,7 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
       void renderScreenShare(payload)
     );
     await client.current.leave();
+    await stopTranscription();
     window.location.href = "/";
   };
 
@@ -287,24 +326,6 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
         <TimeCounter>Elapsed Time: {formatTime(elapsedTime)}</TimeCounter>
       )}
 
-      {/* Conditionally Render Transcription Text */}
-      {inSession && showTranscription && (
-        <div
-          style={{
-            backgroundColor: "rgba(0, 0, 0, 0.7)",
-            color: "white",
-            padding: "10px",
-            borderRadius: "8px",
-            textAlign: "center",
-            width: "100%",
-            maxWidth: "500px",
-            marginBottom: "2rem",
-          }}
-        >
-          <Transcription userName={userName} />
-        </div>
-      )}
-
       {inSession && (
         <ButtonGroup>
           <CameraButton
@@ -334,16 +355,19 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
         </ButtonGroup>
       )}
 
+      <Container>
+      {/* Add Button to Toggle Transcription */}
+      <Button onClick={isTranscriptionEnabled ? stopTranscription : initLiveTranscription}>
+        {isTranscriptionEnabled ? "Stop Transcription" : "Start Transcription"}
+      </Button>
+      </Container>
+
       {/* Chat Popup Toggle Button */}
       {inSession && (
         <ChatButton onClick={() => setIsChatOpen(!isChatOpen)}>
           {isChatOpen ? "Close Chat" : "Open Chat"}
         </ChatButton>
       )}
-
-      <Button onClick={() => setShowTranscription(!showTranscription)}>
-          {showTranscription ? "Hide Transcription" : "Show Transcription"}
-        </Button>
 
       {/* Chat Popup */}
       {inSession && isChatOpen && (
@@ -370,4 +394,15 @@ const screenShareStyle: CSSProperties = {
   marginTop: "1.5rem",
   borderRadius: "10px",
   overflow: "hidden",
+};
+
+const smallVideoStyle: CSSProperties = {
+  height: "20vh",
+  width: "25%",
+  marginTop: "1rem",
+  borderRadius: "10px",
+  overflow: "hidden",
+  position: "absolute",
+  bottom: "1rem",
+  right: "1rem",
 };
