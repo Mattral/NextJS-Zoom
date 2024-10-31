@@ -79,17 +79,17 @@ const Videocall = ({ slug, JWT }: { slug: string; JWT: string }) => {
 
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
-  const liveTranscriptionTranslation = client.getLiveTranscriptionClient();
+  //const liveTranscriptionTranslation = client.getLiveTranscriptionClient();
 
   // Initialize the transcription client
   const initLiveTranscription = async () => {
     const liveTranscriptionClient = client.current.getLiveTranscriptionClient();
 
-    liveTranscriptionTranslation.getLiveTranscriptionStatus()
+    //liveTranscriptionTranslation.getLiveTranscriptionStatus()
     // Set the speaking language
-    await liveTranscriptionClient.setSpeakingLanguage("en");
+    //await liveTranscriptionClient.setSpeakingLanguage("en");
     // Set the translation language if needed (e.g., "es" for Spanish)
-    await liveTranscriptionClient.setTranslationLanguage("en");
+    //await liveTranscriptionClient.setTranslationLanguage("en");
 
     // Start transcription
     liveTranscriptionClient
